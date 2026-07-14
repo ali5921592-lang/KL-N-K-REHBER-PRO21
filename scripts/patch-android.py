@@ -134,6 +134,16 @@ def enable_minify_and_shrink():
 
 
 def add_signing_config(keystore_path, keystore_password, key_alias, key_password):
+    """GERCEK release imzalama yapilandirmasini ekler.
+
+    ONEMLI SIRALAMA: signingConfig atamasi (buildTypes.release icine),
+    signingConfigs {} blogu HENUZ EKLENMEDEN once yapilir. Aksi halde
+    'release {' araniirken, az once eklenen signingConfigs.release
+    blogunun kendisi bulunur ve signingConfig satiri YANLISLIKLA
+    signingConfigs.release'in ICINE eklenir. Bu da Gradle'da
+    'Could not find method signingConfig() for arguments [...]' hatasina
+    yol acar (cunku SigningConfig nesnesinin boyle bir metodu yoktur).
+    """
     with open(BUILD_GRADLE_PATH, "r", encoding="utf-8") as f:
         content = f.read()
 
@@ -141,6 +151,22 @@ def add_signing_config(keystore_path, keystore_password, key_alias, key_password
         log("signingConfigs zaten mevcut, tekrar eklenmiyor.")
         return
 
+    # 1) ONCE: signingConfig atamasini buildTypes.release icine ekle.
+    #    Bu noktada dosyada henuz TEK bir "release {" vardir (buildTypes
+    #    icindeki), bu yuzden regex yanlis yere gidemez.
+    new_content, n = re.subn(
+        r"(release\s*\{)",
+        r"\1\n            signingConfig signingConfigs.release",
+        content,
+        count=1,
+    )
+    if n == 0:
+        log("UYARI: release{} bloğu bulunamadi, signingConfig atanamadi.")
+    else:
+        content = new_content
+        log("signingConfig signingConfigs.release atamasi buildTypes.release icine eklendi.")
+
+    # 2) SONRA: signingConfigs {} blogunu android {} icine ekle.
     signing_block = f"""
     signingConfigs {{
         release {{
@@ -157,18 +183,7 @@ def add_signing_config(keystore_path, keystore_password, key_alias, key_password
         log("HATA: 'android {' bloğu bulunamadi, imzalama eklenemedi.")
         return
     content = new_content
-
-    new_content, n = re.subn(
-        r"(release\s*\{)",
-        r"\1\n            signingConfig signingConfigs.release",
-        content,
-        count=1,
-    )
-    if n == 0:
-        log("UYARI: release{} bloğu bulunamadi, signingConfig atanamadi.")
-    else:
-        content = new_content
-        log("Gercek release imzalama yapilandirmasi eklendi (Play Store'a hazir).")
+    log("Gercek release imzalama yapilandirmasi eklendi (Play Store'a hazir).")
 
     with open(BUILD_GRADLE_PATH, "w", encoding="utf-8") as f:
         f.write(content)
